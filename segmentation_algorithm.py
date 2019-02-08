@@ -7,12 +7,13 @@ from numba import jit
 # Constants
 def LEVEL():
     '''
+        Defines the level of significance.
     '''
     return 0.95
 
 def L0():
     '''
-        Defines the constant value L0, the minimum size of a segment.
+        Defines a constant value L0, the minimum size of a segment.
     '''
     return 20
 
@@ -25,15 +26,15 @@ def export_data(series, pointers, nseg, show_pic, output_name):
                 - Size: number of points in the segment.
                 - Mean: Mean value of the segment.
                 - Sigma: Variance of the segment.
-        
+
         Input:
             - series: original series that was segmented.
             - pointers: array containg the indexes of the starting points of all segments.
             - nseg: number of segments.
             - show_pic: if 1, print the series identifying the segments and save it as .png.
             - output_name: specifies the output name for the picture file.
-            
-        Output: a pandas DataFrame.
+
+        Output: a pandas DataFrame, and a .png file if specified.
     '''
     # All arrays (columns of the DataFrame) are initialized.
     index = np.arange(1, nseg+1)
@@ -42,7 +43,7 @@ def export_data(series, pointers, nseg, show_pic, output_name):
     means = np.zeros(nseg)
     variance = np.zeros(nseg)
     segment_size = np.zeros(nseg)
-    
+
     segment = series[int(pointers[0])+1 : int(pointers[1])+1]
     segment_size[0] = segment.size
     start[0] = pointers[0]
@@ -56,14 +57,14 @@ def export_data(series, pointers, nseg, show_pic, output_name):
         finish[j] = pointers[j+1]
         means[j] = segment.mean()
         variance[j] = segment.var()
-        
+
     result = pd.DataFrame({"index": index,
                            "start": start,
                            "finish": finish,
                            "size": segment_size,
                            "mean": means,
                            "variance": variance})
-    
+
     if show_pic == 1:
         means = np.zeros(0)
         upper_band = np.zeros(0)
@@ -91,26 +92,28 @@ def export_data(series, pointers, nseg, show_pic, output_name):
         ax1.set_ylabel('value')
         fig.savefig(output_name+".png")
         plt.show()
-         
+
     return result.set_index('index')
-    
-@jit    
+
+@jit
 def kstwo(left_seg, left_seg_size, right_seg, right_seg_size):
     '''
         Calculate the KS-Distance between left_seg and right_seg.
-        
+
         Input:
             - left_seg: a numpy array corresponding to a left_segment of the series.
             - right_seg: a numpy array corresponding to a right_segment of the series.
             - left_seg_size: size of the left segment.
             - right_seg_size: size of the right segment.
+
+        Output: the KS Distance, corrected for the diference of sizes between the two segments.
     '''
     j1 = 0
     j2 = 0
     fn1 = 0.0
     fn2 = 0.0
     dks = 0.0
-    
+
     left_temp = np.sort(left_seg)
     right_temp = np.sort(right_seg)
 
@@ -126,60 +129,60 @@ def kstwo(left_seg, left_seg_size, right_seg, right_seg_size):
         dks_temp = math.fabs(fn2 - fn1)
         if(dks_temp > dks):
             dks = dks_temp
-       
+
     effective_size = math.sqrt( left_seg_size*right_seg_size / (left_seg_size + right_seg_size) )
-   
+
     return dks*effective_size
 
-    
+
 def dksmax(series, tLf, tRf):
     '''
         Calculate the maximum Kolmogorov-Smirnov Distance within a series.
         The algorithm will run through all points within the series, passing through all possible segmentations
-        and calculating the KS-Distance between each segment. 
-        
-        Input: 
+        and calculating the KS-Distance between each segment.
+
+        Input:
             - series: an numpy array of the data. The maximum KS-Distance will be calculate for the whole data or
             for a subset defined by tLf and tRf.
             - tLf: index of the first point of the series subset that will be analyzed.
             - tRf: index of the last point of the series subset that will be analyzed.
-            
-        Output: 
+
+        Output:
             = [dmax, idmax]: a list, where dmax is the maximum KS-Distance and idmax is the index of the segmentation
             point corresponding to dmax.
     '''
     dmax = 0.0      # stores the maximum distance
     idmax = 0       # stores the segmentation index.
-    
+
     for k in range(tLf, tRf):
         left_seg_size = k - tLf + 1
         right_seg_size = tRf - k
-    
+
         left_segment = series[tLf : k+1]        # copies data from series to the left segment: from index tLf to k
         right_segment = series[k+1 : tRf+1]     # copies data from series to the right segment: from index k + 1 to tRf
 
         # Calculate the KS-Distance between left_segment and right_segment
         d = kstwo(left_segment, left_seg_size, right_segment, right_seg_size)
-        
+
         if d > dmax:
             dmax = d
             idmax = k
-        
+
     return [dmax, idmax]
 
 def segment(data, show_steps = 0, show_pic = 0, output_name = "segmentation_result"):
     '''
         The main function of the segmentation algorithm.
-        
-        Input: 
+
+        Input:
             Necessary:
                 - data: a numpy array containing the series to be segmented.
-            
+
             Optional:
-                - show_steps: 0 as default; if 1, will shows the status of each step in the segmentation process
+                - show_steps: 0 as default; if 1, will show the status of each step in the segmentation process
                 - show_pic: 0 as default: if 1, print the series identifying the segments and save it as .png.
                 - output_name: "segmentation_result" as default; specifies the output name for the picture file.
-                
+
         Output:
             A pandas DataFrame with the segmentation result, consisting of 6 columns:
                 - Segment: Segment number.
@@ -188,11 +191,11 @@ def segment(data, show_steps = 0, show_pic = 0, output_name = "segmentation_resu
                 - Mean: Mean value of the segment.
                 - Sigma: Variance of the segment.
     '''
-    
+
     series, seriesSize = np.insert(data, 0, 0, axis = 0), np.size(data)
     max_seg_number = math.ceil(seriesSize / L0())
     print("Series Size = ", seriesSize, "\nL0 (Minimum Segment Size) = ", L0(), "\nMaximum Number of Segments ( ceil(n / L0) ) = ", max_seg_number)
-    
+
     # Definition of necessary arrays.
     # pointers: will countain the index numbers of the starting points of each segment.
     # segIndicator: each index 'i' will indicate if the segment starting at pointers[i] is segmentable or not.
@@ -203,7 +206,7 @@ def segment(data, show_steps = 0, show_pic = 0, output_name = "segmentation_resu
     segIndicator = np.zeros(max_seg_number)
     pointers_temp = np.zeros(max_seg_number)
     segIndicator_temp = np.zeros(max_seg_number)
-    
+
     # Initially, the series have only one segment, starting at 0 (p[0] = 0, as defined) and ending at seriesSize - 1,
     # therefore, the starting point of the "second segment" is set as equal to seriesSize.
     # nseg: counts the number of segments detected.
@@ -213,16 +216,16 @@ def segment(data, show_steps = 0, show_pic = 0, output_name = "segmentation_resu
     nseg = 1
     step = 0
     segmenting = 1
-    
+
     while segmenting == 1:
         step += 1
         new_segments = 0 # Is set to 1 if a new segment is detected
         segmenting = 0   # Is set to 1 if a new segment is detected
-        
+
         # The values in the arrays "pointers_temp" and "segIndicator_temp" will be modified along the algorithm
         pointers_temp[0 : nseg+1] = pointers[0 : nseg+1]
         segIndicator_temp[0 : nseg+1] = segIndicator[0 : nseg+1]
-        
+
         if show_steps == 1:
             print("\n------------------------------------------------------")
             print("Step ", step,". Current state:")
@@ -230,14 +233,14 @@ def segment(data, show_steps = 0, show_pic = 0, output_name = "segmentation_resu
             for j in np.arange(1, nseg):
                 print("> Segment [%d]\t Start: %d\t Non-segmentable: %d" % (j+1, pointers[j] + 1, segIndicator[j]))
             print("------------------------------------------------------\n")
-            
+
         for j in np.arange(0, nseg):
             if(segIndicator[j] == 0):
                 dmax, idmax = dksmax(series, int(pointers[j]) + 1, int(pointers[j + 1]))
                 if show_steps == 1:
                     print("Analyzing segment starting at %d and ending at %d"%(pointers[j] + 1, pointers[j+1]))
                     print(">> Maximum KS-Distance = %lg\t Segmentation Index = %d" % (dmax, idmax))
-                
+
                 # Verify if the segment size is greater or equal to the minimum size
                 is_size_min = (idmax - pointers[j]) >= L0() and (pointers[j+1] - idmax) >= L0()
                 if not is_size_min:
@@ -251,7 +254,7 @@ def segment(data, show_steps = 0, show_pic = 0, output_name = "segmentation_resu
                     #dcrit = 1.41 * math.exp(0.15*math.log(math.log(pointers[j+1] - pointers[j]) - 1.74)) # 90%
                     dcrit = 1.52 * math.exp(0.14*math.log(math.log(pointers[j+1] - pointers[j]) - 1.80)) # 95%
                     #dcrit = 1.72 * math.exp(0.13*math.log(math.log(pointers[j+1] - pointers[j]) - 1.86)) # 99%
-                    
+
                     # Verify if the segmentation is significant
                     is_significant = dmax > dcrit
                     if not is_significant:
@@ -260,32 +263,32 @@ def segment(data, show_steps = 0, show_pic = 0, output_name = "segmentation_resu
                             print("Not significant: dmax(%lg) < dcrit(%lg)\n"%(dmax, dcrit))
                     else:
                         # The proposed segmentation is significant and the segment size is at least L0.
-                        segmenting = 1  
+                        segmenting = 1
                         new_segments += 1
-                        
+
                         if(j + new_segments > max_seg_number):
                             print("ERROR\n")
-                        
+
                         pointers_temp = np.insert(pointers_temp, j + new_segments, idmax)
                         segIndicator_temp = np.insert(segIndicator_temp, j + new_segments, 0)
-                        
+
                         flag1 = pointers_temp[j + new_segments + 1] - pointers_temp[j + new_segments] >= 2 * L0()
-                        
+
                         if not flag1:
                             segIndicator_temp[j + new_segments] = 1
                         else:
                             if show_steps == 1:
                                 print("Accepted new segment - Starting Index: %d\t Segmentation Point : %d\t Ending index: %d\n"%(pointers[j], idmax, pointers[j+1]))
-                            
+
         nseg += new_segments
         pointers[0:nseg+1] = pointers_temp[0 : nseg+1]
         segIndicator[0 : nseg+1] = segIndicator_temp[0 : nseg+1]
-        
-    
+
+
     print("\n\nFinished.")
     pointers[nseg] = pointers[nseg] - 1
-    print("> Segment [%d]\t Start: %d\t Non-segmentable: %d" % (1, pointers[0], segIndicator[0]))  
+    print("> Segment [%d]\t Start: %d\t Non-segmentable: %d" % (1, pointers[0], segIndicator[0]))
     for j in np.arange(1, nseg):
             print("> Segment [%d]\t Start: %d\t Finish: %d\t Non-segmentable: %d" % (j+1, pointers[j] + 1, pointers[j+1], segIndicator[j]))
-    
+
     return export_data(series, pointers, nseg, show_pic, output_name)
