@@ -1,1 +1,2 @@
-# KS_Segmentation_Algorithm
+# Kolmogorov-Smirnov Segmentation Algorithm
+
